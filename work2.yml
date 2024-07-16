@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create a new VPC with two public subnets
+
+"Parameters": {
+    "LatestAmiId1": {
+        "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+        "Default": "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+    }
+}
+
+Resources:
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    DeletionPolicy: Retain
+    Properties:
+      LaunchTemplateData:
+        InstanceType: t2.micro
+        ImageId: !Ref LatestAmiId1
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+    
+                
+  MyAutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn: MyLaunchTemplate
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      MinSize: 2
+      MaxSize: 2
+      AvailabilityZones: 
+        - !Select [0, !GetAZs '']
+      VPCZoneIdentifier: 
+        - !Ref Subnet1
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+            PropagateAtLaunch: 'true'
+      
+
+     
+  EC2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: {"Ref":"LatestAmiId1"}
+      InstanceType: 't2.micro'
+      SubnetId: !Ref Subnet1
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+          
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      InstanceTenancy: 'default'
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+   
+  Subnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: '10.0.0.0/24'
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+  
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+          Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+ 
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+      
+
+
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+ 
+  Route:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway 
+    
+
+
+  SubnetRouteTableAssociation1:
+
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet1
+      RouteTableId: !Ref RouteTable
+  
+
+
