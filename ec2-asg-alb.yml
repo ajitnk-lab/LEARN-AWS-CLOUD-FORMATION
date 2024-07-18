@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create a new VPC with two public subnets
+
+"Parameters": {
+    "LatestAmiId1": {
+        "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+        "Default": "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+    }
+}
+
+Resources:
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: 'Ajit-CFN-STACK-Learning1'
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
+      SecurityGroups:
+        - !Ref ApplicationLoadBalancerSecurityGroup
+      Scheme: internet-facing
+      Type: 'application'
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+      
+
+  Listener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: 'Ajit-CFN-STACK-Lrn1'
+      TargetType: 'instance'
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      HealthCheckPath: /index.html
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 5
+      
+
+
+  ApplicationLoadBalancerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: 'Ajit-CFN-STACK-Learning1'
+      GroupDescription : 'Security group for ALB'
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+      VpcId: !Ref VPC
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+      
+    
+
+
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              wait_for_yum_lock() {
+                while sudo fuser /var/run/yum.pid >/dev/null 2>&1 ; do
+                   echo "Waiting for other software managers to finish..."
+                   sleep 5
+                done
+              }
+              
+              # Wait for yum lock before updating
+              wait_for_yum_lock
+              sudo yum update -y
+              
+              # Wait for yum lock before installing httpd
+              wait_for_yum_lock
+              sudo yum install -y httpd
+              
+              sudo systemctl start httpd
+              sudo systemctl enable httpd
+              echo "<h1>Hello from $(hostname -f)</h1>" > /var/www/html/index.html
+              echo "Health check page" > /var/www/html/health.html
+              
+              # Log the completion of user data script
+              echo "User data script completed" >> /var/log/user-data.log
+        InstanceType: t2.micro
+        SecurityGroupIds:
+          - !Ref ApplicationLoadBalancerSecurityGroup
+        ImageId: !Ref LatestAmiId1
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+                
+
+
+
+  MyAutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      TargetGroupARNs:
+           - !Ref TargetGroup
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      MinSize: 2
+      MaxSize: 2
+      DesiredCapacity: '2'
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 500
+      AvailabilityZones: 
+        - !Select [0, !GetAZs '']
+        - !Select [1, !GetAZs '']
+      VPCZoneIdentifier: 
+        - !Ref Subnet1
+        - !Ref Subnet2
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+            PropagateAtLaunch: 'true'
+      
+
+     
+  EC2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: {"Ref":"LatestAmiId1"}
+      InstanceType: 't2.micro'
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+          
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      InstanceTenancy: 'default'
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+   
+  Subnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: '10.0.0.0/24'
+      MapPublicIpOnLaunch: 'true'
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+  Subnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: '10.0.1.0/24'
+      MapPublicIpOnLaunch: 'true'
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+          Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+ 
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+      
+
+
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+          - Key: Name
+            Value: Ajit-CFN-STACK-Learning1-Cloudformation-Project1
+
+ 
+  Route:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway 
+    
+
+
+  SubnetRouteTableAssociation1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet1
+      RouteTableId: !Ref RouteTable
+
+
+  SubnetRouteTableAssociation2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref Subnet2
+      RouteTableId: !Ref RouteTable
+  
+
+
